@@ -1,0 +1,352 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WEB-VERSON | ENDLESS-CAPTCHA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&display=swap');
+
+        body {
+            font-family: 'Fira Code', monospace;
+            background-color: #060913;
+            color: #7dd3fc;
+        }
+
+        /* Glitch & CRT Effects */
+        .scanline {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%, 
+                rgba(0, 0, 0, 0.25) 50%
+            );
+            background-size: 100% 4px;
+            z-index: 50;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        .glow-border {
+            box-shadow: 0 0 15px rgba(14, 165, 233, 0.2), inset 0 0 15px rgba(14, 165, 233, 0.1);
+        }
+
+        .glow-border-danger {
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.3), inset 0 0 15px rgba(239, 68, 68, 0.15);
+        }
+
+        .btn-glitch {
+            position: relative;
+            transition: all 0.15s ease;
+        }
+        
+        .btn-glitch:hover {
+            box-shadow: 0 0 20px rgba(14, 165, 233, 0.6);
+            transform: translateY(-2px);
+        }
+
+        .btn-glitch:active {
+            transform: translateY(1px);
+        }
+
+        /* Shake animation on wrong captcha */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-8px); }
+            40%, 80% { transform: translateX(8px); }
+        }
+
+        .shake-anim {
+            animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #090d16;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #0284c7;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between items-center p-4 select-none overflow-x-hidden">
+    <div class="scanline"></div>
+
+    <!-- Header Terminal Info -->
+    <header class="w-full max-w-4xl pt-4 flex justify-between items-center text-xs text-sky-600 border-b border-sky-950 pb-2">
+        <div>SYS_ID: 0x88F-KAP</div>
+        <div id="statusIndicator" class="flex items-center gap-2">
+            <span class="inline-block w-2 h-2 rounded-full bg-sky-500 animate-pulse"></span>
+            <span>STATUS: NORMAL</span>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col items-center justify-center text-center px-4 my-8">
+        <div class="mb-8">
+            <h1 class="text-3xl md:text-5xl font-bold tracking-widest text-sky-400 mb-2">SYSTEM // ENGINE</h1>
+            <p class="text-xs md:text-sm text-sky-600/70">PROTOTYP v0.9.4 - BEREIT</p>
+        </div>
+
+        <div class="p-6 bg-slate-950/80 border border-sky-900/40 rounded-xl glow-border max-w-md w-full mb-12">
+            <div class="text-left text-xs text-sky-500 space-y-1 mb-4 font-mono">
+                <p>&gt; System bereit.</p>
+                <p>&gt; Warte auf Benutzereingabe...</p>
+                <p id="counterLog" class="text-sky-400">&gt; Klicks: 0</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Bottom Action Button -->
+    <footer class="w-full max-w-md pb-8">
+        <button id="mainBtn" onclick="handleClick()" class="btn-glitch w-full py-4 bg-sky-950 hover:bg-sky-900 text-sky-300 font-bold tracking-wider text-xl rounded-lg border-2 border-sky-500/60 uppercase">
+            [ RANDOM ]
+        </button>
+    </footer>
+
+    <!-- POPUP MODAL -->
+    <div id="modalOverlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 hidden flex items-center justify-center p-4">
+        <div id="modalBox" class="bg-slate-950 border-2 border-sky-500/80 rounded-xl max-w-md w-full p-6 glow-border relative text-left">
+            
+            <!-- Modal Header -->
+            <div class="flex justify-between items-center border-b border-sky-900/60 pb-3 mb-4">
+                <span id="modalHeaderTitle" class="text-sm font-bold text-sky-400 tracking-wider">POPUP_ENTRY // 0</span>
+                <span id="modalLevelTag" class="text-xs bg-sky-950 text-sky-400 px-2 py-0.5 border border-sky-800 rounded">LVL 0</span>
+            </div>
+
+            <!-- Modal Dynamic Content Body -->
+            <div id="modalBody" class="mb-6">
+                <!-- Content will be injected here via JS -->
+            </div>
+
+            <!-- Modal Action Buttons -->
+            <div class="flex justify-end pt-2 border-t border-sky-900/40">
+                <button id="modalActionBtn" onclick="handleModalAction()" class="btn-glitch px-6 py-2 bg-sky-900 hover:bg-sky-800 text-sky-200 text-sm font-semibold rounded border border-sky-500/50">
+                    WEITER &gt;
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let clickCount = 0;
+        let currentCaptchaType = '';
+        let captchaTargetValue = null;
+
+        // Elements
+        const modalOverlay = document.getElementById('modalOverlay');
+        const modalBox = document.getElementById('modalBox');
+        const modalHeaderTitle = document.getElementById('modalHeaderTitle');
+        const modalLevelTag = document.getElementById('modalLevelTag');
+        const modalBody = document.getElementById('modalBody');
+        const modalActionBtn = document.getElementById('modalActionBtn');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const counterLog = document.getElementById('counterLog');
+
+        // SVG Broken Leaf
+        const brokenLeafSVG = `
+            <div class="flex flex-col items-center justify-center p-4 bg-slate-900/90 border border-sky-900/50 rounded-lg">
+                <span class="text-xs font-semibold text-sky-400 tracking-widest uppercase mb-3">[ MEME ]</span>
+                <svg class="w-32 h-32 text-sky-500/80 my-2" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <!-- Left Leaf Half -->
+                    <path d="M50 15 C 25 25, 10 55, 30 85 C 40 70, 42 50, 48 35 Z" fill="#0369a1" fill-opacity="0.2" stroke="#0284c7" />
+                    <!-- Right Leaf Half (Broken & Shifted) -->
+                    <path d="M54 20 C 75 30, 90 60, 72 88 C 62 72, 58 55, 54 40 Z" fill="#0284c7" fill-opacity="0.15" stroke="#38bdf8" transform="translate(6, 4) rotate(4 50 50)" />
+                    <!-- Fracture Line -->
+                    <path d="M50 15 L47 35 L53 50 L46 70 L50 92" stroke="#ef4444" stroke-width="2" stroke-dasharray="2 1" />
+                    <!-- Leaf Veins Left -->
+                    <path d="M40 45 L30 40 M38 60 L25 58 M44 75 L32 78" stroke="#0284c7" stroke-width="1" />
+                    <!-- Leaf Veins Right -->
+                    <path d="M58 48 L70 45 M58 65 L72 66 M54 80 L65 84" stroke="#38bdf8" stroke-width="1" />
+                </svg>
+                <div class="mt-3 text-center">
+                    <span class="text-xs text-sky-400 font-mono">DATEN: ZERBROCHENES_BLATT.PNG</span>
+                </div>
+            </div>
+        `;
+
+        function handleClick() {
+            clickCount++;
+            counterLog.innerText = `> Klicks: ${clickCount}`;
+            openModal();
+        }
+
+        function openModal() {
+            modalOverlay.classList.remove('hidden');
+            renderModalContent();
+        }
+
+        function closeModal() {
+            modalOverlay.classList.add('hidden');
+        }
+
+        function renderModalContent() {
+            // Remove previous error shake if any
+            modalBox.classList.remove('shake-anim');
+
+            if (clickCount < 10) {
+                // PHASE 1: Standard Broken Leaf Popups (1 to 9)
+                modalHeaderTitle.innerText = `POPUP_ENTRY // ${clickCount}`;
+                modalLevelTag.innerText = `LVL ${clickCount}`;
+                modalLevelTag.className = "text-xs bg-sky-950 text-sky-400 px-2 py-0.5 border border-sky-800 rounded";
+                modalBox.className = "bg-slate-950 border-2 border-sky-500/80 rounded-xl max-w-md w-full p-6 glow-border relative text-left";
+                
+                modalBody.innerHTML = brokenLeafSVG;
+                modalActionBtn.innerText = "WEITER >";
+                modalActionBtn.className = "btn-glitch px-6 py-2 bg-sky-900 hover:bg-sky-800 text-sky-200 text-sm font-semibold rounded border border-sky-500/50";
+            } else {
+                // PHASE 2: Infinite Captcha Mode (10+)
+                statusIndicator.innerHTML = `
+                    <span class="inline-block w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                    <span class="text-red-400 font-bold">STATUS: CAPTCHA_LOCKOUT</span>
+                `;
+                
+                modalHeaderTitle.innerText = `CAPTCHA // REQ_${clickCount}`;
+                modalLevelTag.innerText = `STAGE ${clickCount - 9}`;
+                modalLevelTag.className = "text-xs bg-red-950 text-red-400 px-2 py-0.5 border border-red-800 rounded font-bold";
+                modalBox.className = "bg-slate-950 border-2 border-red-600/80 rounded-xl max-w-md w-full p-6 glow-border-danger relative text-left";
+                
+                modalActionBtn.innerText = "PRÜFEN >";
+                modalActionBtn.className = "btn-glitch px-6 py-2 bg-red-950 hover:bg-red-900 text-red-200 text-sm font-bold rounded border border-red-600/60";
+
+                generateRandomCaptcha();
+            }
+        }
+
+        function handleModalAction() {
+            if (clickCount < 10) {
+                closeModal();
+            } else {
+                verifyCaptcha();
+            }
+        }
+
+        // --- CAPTCHA GENERATOR & VERIFIER ---
+        function generateRandomCaptcha() {
+            const types = ['math', 'pattern', 'target'];
+            // Pick random captcha type
+            currentCaptchaType = types[Math.floor(Math.random() * types.length)];
+
+            if (currentCaptchaType === 'math') {
+                const a = Math.floor(Math.random() * 40) + 10;
+                const b = Math.floor(Math.random() * 40) + 10;
+                captchaTargetValue = a + b;
+
+                modalBody.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="text-xs text-red-400 font-mono border-b border-red-950 pb-1">CODE_EINGABE_ERFORDERLICH</div>
+                        <div class="p-4 bg-slate-900 border border-red-900/40 rounded flex flex-col items-center justify-center">
+                            <span class="text-2xl font-bold text-sky-300 tracking-wider font-mono">${a} + ${b} = ?</span>
+                        </div>
+                        <input type="number" id="captchaInput" placeholder="Eingabe..." autofocus
+                            class="w-full bg-slate-900 border border-sky-800 focus:border-red-500 text-sky-200 p-3 rounded text-center text-lg outline-none font-mono">
+                    </div>
+                `;
+                setTimeout(() => {
+                    const input = document.getElementById('captchaInput');
+                    if (input) input.focus();
+                }, 50);
+
+            } else if (currentCaptchaType === 'pattern') {
+                const codeLength = 4;
+                const characters = 'ABCDEF123456789';
+                let result = '';
+                for (let i = 0; i < codeLength; i++) {
+                    result += characters.charAt(Math.floor(Math.random() * characters.length));
+                }
+                captchaTargetValue = result;
+
+                modalBody.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="text-xs text-red-400 font-mono border-b border-red-950 pb-1">MUSTER_BESTÄTIGUNG</div>
+                        <div class="p-4 bg-slate-900 border border-red-900/40 rounded flex items-center justify-center tracking-widest select-none">
+                            <span class="text-2xl font-bold text-red-400/90 italic font-mono decoration-wavy underline ring-1 ring-red-900 p-2 rounded bg-black/40">${result}</span>
+                        </div>
+                        <input type="text" id="captchaInput" placeholder="Muster eingeben..." autofocus uppercase
+                            class="w-full bg-slate-900 border border-sky-800 focus:border-red-500 text-sky-200 p-3 rounded text-center text-lg outline-none uppercase font-mono">
+                    </div>
+                `;
+                setTimeout(() => {
+                    const input = document.getElementById('captchaInput');
+                    if (input) input.focus();
+                }, 50);
+
+            } else if (currentCaptchaType === 'target') {
+                const targetIdx = Math.floor(Math.random() * 9);
+                captchaTargetValue = targetIdx;
+
+                let gridHTML = '<div class="grid grid-cols-3 gap-2 mt-2">';
+                for (let i = 0; i < 9; i++) {
+                    gridHTML += `
+                        <button onclick="selectTargetTile(${i})" id="tile_${i}" 
+                            class="h-16 bg-slate-900 border border-sky-900/60 hover:border-red-500 rounded flex items-center justify-center transition-all">
+                            <span class="w-3 h-3 rounded-full ${i === targetIdx ? 'bg-red-500 shadow-[0_0_8px_#ef4444]' : 'bg-sky-950'}"></span>
+                        </button>
+                    `;
+                }
+                gridHTML += '</div>';
+
+                modalBody.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="text-xs text-red-400 font-mono border-b border-red-950 pb-1">ZIEL_SELEKTION (ROTER PUNKT)</div>
+                        ${gridHTML}
+                        <input type="hidden" id="captchaInput" value="">
+                    </div>
+                `;
+            }
+        }
+
+        let selectedTile = null;
+        function selectTargetTile(idx) {
+            selectedTile = idx;
+            document.getElementById('captchaInput').value = idx;
+            for (let i = 0; i < 9; i++) {
+                const tile = document.getElementById(`tile_${i}`);
+                if (tile) {
+                    if (i === idx) {
+                        tile.classList.add('border-red-500', 'bg-red-950/40');
+                    } else {
+                        tile.classList.remove('border-red-500', 'bg-red-950/40');
+                    }
+                }
+            }
+        }
+
+        function verifyCaptcha() {
+            const inputEl = document.getElementById('captchaInput');
+            if (!inputEl) return;
+
+            let userVal = inputEl.value.trim();
+
+            let isCorrect = false;
+            if (currentCaptchaType === 'math') {
+                isCorrect = parseInt(userVal, 10) === captchaTargetValue;
+            } else if (currentCaptchaType === 'pattern') {
+                isCorrect = userVal.toUpperCase() === captchaTargetValue.toUpperCase();
+            } else if (currentCaptchaType === 'target') {
+                isCorrect = parseInt(userVal, 10) === captchaTargetValue;
+            }
+
+            if (isCorrect) {
+                // Correct -> Immediate next stage captcha (Endless)
+                clickCount++;
+                counterLog.innerText = `> Klicks: ${clickCount}`;
+                renderModalContent();
+            } else {
+                // Wrong -> Shake animation
+                modalBox.classList.remove('shake-anim');
+                void modalBox.offsetWidth; // trigger reflow
+                modalBox.classList.add('shake-anim');
+            }
+        }
+    </script>
+</body>
+</html>
+
+
